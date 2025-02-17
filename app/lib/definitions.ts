@@ -1,7 +1,58 @@
 // This file contains type definitions for your data.
 // It describes the shape of the data, and what data type each property should accept.
 // For simplicity of teaching, we're manually defining these types.
+
+import { DateTime } from "next-auth/providers/kakao";
+
 // However, these types are generated automatically if you're using an ORM such as Prisma.
+export type eEmployee = {
+  employeeID: number;
+  eMail: string;
+  displayName: string;
+  fullName: string;
+  displayColumn: string;
+  culture: string;
+  sTS: string;
+  phone: string;
+  isTraining: boolean;
+  roleID: number;
+  sIN: string;
+  wage: number;
+  address: string;
+  city: string;
+  province: string;
+  country: string;
+  postal: string;
+  isDriver: boolean;
+  uID: number;
+  startDate?: DateTime;
+  notes: string;
+  storeLocation: string;
+  mandatoryClockIn: boolean;
+  declareTips: boolean;
+  restrictedRC: string;
+  selfCheckoutAssistantCode: string;
+  showOwnSavedTxOnly: boolean;
+  favourite: string;
+  hasWebSrmAccount: boolean;  
+};
+
+export type WebEmployeeJson = {
+  employee: eEmployee;
+  isPwdRequired: boolean;
+};
+
+export type EmpLoginParam = {
+  publicToken: string;
+  userId: string;
+};
+
+export type EmpPwdParam = {
+  publicToken: string;
+  employeeId: number;
+  password: string;
+};
+
 export type User = {
   id: string;
   name: string;
