@@ -2,10 +2,22 @@
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import postgres from 'postgres';
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
 
- 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+const config = {
+  user: process.env.DB_USER,      // SQL Server username
+  password: process.env.DB_PASS,  // SQL Server password
+  server: process.env.DB_HOST,    // SQL Server hostname or IP
+  database: process.env.DB_NAME,  // Database name
+  options: {
+    encrypt: true,   // Use encryption (recommended for Azure)
+    trustServerCertificate: true, // Use this if you're on a local dev machine
+  },
+};
+
+const sql = require('mssql');
+await sql.connect(config);
 
 const FormSchema = z.object({
     id: z.string(),
@@ -51,7 +63,7 @@ export async function createInvoice(prevState: State, formData: FormData) {
       const date = new Date().toISOString().split('T')[0];
      
       try {
-        await sql`
+        await sql.query`
             INSERT INTO invoices (customer_id, amount, status, date)
             VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
         `;
@@ -85,7 +97,7 @@ export async function updateInvoice(id: string, prevState: State, formData: Form
     const amountInCents = amount * 100;
    
     try {
-        await sql`
+        await sql.query`
             UPDATE invoices
             SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
             WHERE id = ${id}
@@ -101,7 +113,7 @@ export async function updateInvoice(id: string, prevState: State, formData: Form
   export async function deleteInvoice(id: string) {
 
     try {
-        await sql`DELETE FROM invoices WHERE id = ${id}`;
+        await sql.query`DELETE FROM invoices WHERE id = ${id}`;
     } catch (error) {
         console.log(error);
     }
@@ -109,4 +121,21 @@ export async function updateInvoice(id: string, prevState: State, formData: Form
     revalidatePath('/dashboard/invoices');
   }
 
-  
+  export async function authenticate(
+    prevState: string | undefined,
+    formData: FormData,
+  ) {
+    try {
+      await signIn('credentials', formData);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        switch (error.type) {
+          case 'CredentialsSignin':
+            return 'Invalid credentials.';
+          default:
+            return 'Something went wrong.';
+        }
+      }
+      throw error;
+    }
+  }

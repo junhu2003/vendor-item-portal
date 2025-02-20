@@ -3,67 +3,54 @@ import NextAuth from 'next-auth';
 import { authConfig } from './auth.config';
 import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
-import type { User, WebEmployeeJson } from '@/app/lib/definitions';
-import { postGetEmployee, postVerifyEmployeePwd } from '@/app/lib/applicationApi';
+import type { User } from '@/app/lib/definitions';
+import bcryptjs from 'bcryptjs';
+//import sql from 'mssql';
 
+const config = {
+  user: process.env.DB_USER,      // SQL Server username
+  password: process.env.DB_PASS,  // SQL Server password
+  server: process.env.DB_HOST,    // SQL Server hostname or IP
+  database: process.env.DB_NAME,  // Database name
+  options: {
+    encrypt: true,   // Use encryption (recommended for Azure)
+    trustServerCertificate: true, // Use this if you're on a local dev machine
+  },
+};
+
+const sql = require('mssql');
+await sql.connect(config);
  
-async function getEmployee(userId: string): Promise<WebEmployeeJson | undefined> {
-  let webEmp = undefined;  
-  await postGetEmployee('563449A5511C45FBAD060D310088AD2E', userId)
-    .then((empJson: WebEmployeeJson) => {         
-      webEmp = empJson;          
-    }).catch((err) => {
-      console.error('Failed to fetch user:', err);
-      throw new Error('Failed to fetch user.');
-    })
-  return webEmp;
+async function getUser(email: string): Promise<User | undefined> {
+  try {
+        const result = await sql.query`SELECT * FROM users WHERE email=${email}`;
+        return result.recordset[0];
+    } catch (error) {
+        console.error('Failed to fetch user:', error);
+        throw new Error('Failed to fetch user.');
+    }
 }
  
 export const { auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [Credentials({
-    
     async authorize(credentials) {
       const parsedCredentials = z
-        .object({ userid: z.string(), password: z.string() })
+        .object({ email: z.string().email(), password: z.string().min(6) })
         .safeParse(credentials);
 
-        let result = null;
-        if (parsedCredentials.success) {      
-            const { userid, password } = parsedCredentials.data;
-            const webEmp = await getEmployee(userid);
-            
-            if (!webEmp || !webEmp.employee) {
-              result = null;
-            } else if (!webEmp.isPwdRequired) {
-              const user: User = {
-                id: webEmp.employee.employeeID.toString(),
-                name: webEmp.employee.displayName,
-                email: webEmp.employee.eMail,
-                password: '',
-              };
+        if (parsedCredentials.success) {
+            const { email, password } = parsedCredentials.data;
+            const user = await getUser(email);
+            if (!user) return null;
 
-              result = user;
-            } else {
-              await postVerifyEmployeePwd('563449A5511C45FBAD060D310088AD2E', webEmp.employee.employeeID.toString(), password)
-                .then((isMatch: boolean) => {
-                    if (isMatch) {
-                      const user: User = {
-                        id: webEmp.employee.employeeID.toString(),
-                        name: webEmp.employee.displayName,
-                        email: webEmp.employee.eMail,
-                        password: password,
-                      };
-        
-                      result = user;
-                    }                    
-                }).catch((err) => {
-                  console.error('Failed to fetch user:', err);
-                  throw new Error('Failed to fetch user.');
-                })
-            }
+            const passwordsMatch = await bcryptjs.compare(password, user.password);
+ 
+            if (passwordsMatch) return user;
           }
-          return result;
+   
+          console.log('Invalid credentials');
+          return null;
     },
   }),],
 });

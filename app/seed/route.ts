@@ -1,27 +1,37 @@
 import bcryptjs from 'bcryptjs';
-import postgres from 'postgres';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+const config = {
+  user: process.env.DB_USER,      // SQL Server username
+  password: process.env.DB_PASS,  // SQL Server password
+  server: process.env.DB_HOST,    // SQL Server hostname or IP
+  database: process.env.DB_NAME,  // Database name
+  options: {
+    encrypt: true,   // Use encryption (recommended for Azure)
+    trustServerCertificate: true, // Use this if you're on a local dev machine
+  },
+};
+
+const sql = require('mssql');
+await sql.connect(config);
 
 async function seedUsers() {
-  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-  await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  
+  await sql.query`
+    CREATE TABLE dbo.users (
+      id UNIQUEIDENTIFIER PRIMARY KEY default NEWID(),
       name VARCHAR(255) NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password VARCHAR(255) NOT NULL
     );
   `;
 
   const insertedUsers = await Promise.all(
     users.map(async (user) => {
       const hashedPassword = await bcryptjs.hash(user.password, 10);
-      return sql`
-        INSERT INTO users (id, name, email, password)
-        VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
-        ON CONFLICT (id) DO NOTHING;
+      return sql.query`
+        INSERT INTO dbo.users (id, name, email, password)
+        VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword});
       `;
     }),
   );
@@ -29,13 +39,12 @@ async function seedUsers() {
   return insertedUsers;
 }
 
-async function seedInvoices() {
-  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+async function seedInvoices() {  
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS invoices (
-      id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-      customer_id UUID NOT NULL,
+  await sql.query`
+    CREATE TABLE dbo.invoices (
+      id UNIQUEIDENTIFIER PRIMARY KEY default NEWID(),
+      customer_id UNIQUEIDENTIFIER NOT NULL,
       amount INT NOT NULL,
       status VARCHAR(255) NOT NULL,
       date DATE NOT NULL
@@ -44,10 +53,9 @@ async function seedInvoices() {
 
   const insertedInvoices = await Promise.all(
     invoices.map(
-      (invoice) => sql`
-        INSERT INTO invoices (customer_id, amount, status, date)
-        VALUES (${invoice.customer_id}, ${invoice.amount}, ${invoice.status}, ${invoice.date})
-        ON CONFLICT (id) DO NOTHING;
+      (invoice) => sql.query`
+        INSERT INTO dbo.invoices (customer_id, amount, status, date)
+        VALUES (${invoice.customer_id}, ${invoice.amount}, ${invoice.status}, ${invoice.date});
       `,
     ),
   );
@@ -56,11 +64,11 @@ async function seedInvoices() {
 }
 
 async function seedCustomers() {
-  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+  
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS customers (
-      id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  await sql.query`
+    CREATE TABLE dbo.customers (
+      id UNIQUEIDENTIFIER PRIMARY KEY default NEWID(),
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) NOT NULL,
       image_url VARCHAR(255) NOT NULL
@@ -69,10 +77,9 @@ async function seedCustomers() {
 
   const insertedCustomers = await Promise.all(
     customers.map(
-      (customer) => sql`
-        INSERT INTO customers (id, name, email, image_url)
-        VALUES (${customer.id}, ${customer.name}, ${customer.email}, ${customer.image_url})
-        ON CONFLICT (id) DO NOTHING;
+      (customer) => sql.query`
+        INSERT INTO dbo.customers (id, name, email, image_url)
+        VALUES (${customer.id}, ${customer.name}, ${customer.email}, ${customer.image_url});
       `,
     ),
   );
@@ -81,8 +88,8 @@ async function seedCustomers() {
 }
 
 async function seedRevenue() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS revenue (
+  await sql.query`
+    CREATE TABLE dbo.revenue (
       month VARCHAR(4) NOT NULL UNIQUE,
       revenue INT NOT NULL
     );
@@ -90,10 +97,9 @@ async function seedRevenue() {
 
   const insertedRevenue = await Promise.all(
     revenue.map(
-      (rev) => sql`
-        INSERT INTO revenue (month, revenue)
-        VALUES (${rev.month}, ${rev.revenue})
-        ON CONFLICT (month) DO NOTHING;
+      (rev) => sql.query`
+        INSERT INTO dbo.revenue (month, revenue)
+        VALUES (${rev.month}, ${rev.revenue});
       `,
     ),
   );
@@ -103,12 +109,12 @@ async function seedRevenue() {
 
 export async function GET() {
   try {
-    const result = await sql.begin((sql) => [
-      seedUsers(),
-      seedCustomers(),
-      seedInvoices(),
-      seedRevenue(),
-    ]);
+    
+    await seedUsers();
+    await seedCustomers();
+    await seedInvoices();
+    await seedRevenue();
+    
 
     return Response.json({ message: 'Database seeded successfully' });
   } catch (error) {
