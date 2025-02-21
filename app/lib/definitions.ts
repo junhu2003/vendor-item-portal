@@ -65,6 +65,10 @@ export type Customer = {
   name: string;
   email: string;
   image_url: string;
+  user_type_id: string;
+  user_level_id: string;
+  vendor_id: string;
+  store_id: string;
 };
 
 export type Invoice = {

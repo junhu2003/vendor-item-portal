@@ -22,7 +22,12 @@ async function seedUsers() {
       id UNIQUEIDENTIFIER PRIMARY KEY default NEWID(),
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) NOT NULL UNIQUE,
-      password VARCHAR(255) NOT NULL
+      password VARCHAR(255) NOT NULL,
+      user_type_id int NOT NULL,
+      user_level_id int NOT NULL,
+      vendor_id int NULL,
+      store_id int NULL,
+      first_login bit NOT NULL
     );
   `;
 
@@ -30,8 +35,9 @@ async function seedUsers() {
     users.map(async (user) => {
       const hashedPassword = await bcryptjs.hash(user.password, 10);
       return sql.query`
-        INSERT INTO dbo.users (id, name, email, password)
-        VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword});
+        INSERT INTO dbo.users (id, name, email, password, user_type_id, user_level_id, vendor_id, store_id, first_login
+)
+        VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword}, ${user.user_type_id}, ${user.user_level_id}, ${user.vendor_id}, ${user.store_id}, ${user.first_login});
       `;
     }),
   );
@@ -111,9 +117,9 @@ export async function GET() {
   try {
     
     await seedUsers();
-    await seedCustomers();
-    await seedInvoices();
-    await seedRevenue();
+    //await seedCustomers();
+    //await seedInvoices();
+    //await seedRevenue();
     
 
     return Response.json({ message: 'Database seeded successfully' });

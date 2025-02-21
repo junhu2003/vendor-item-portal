@@ -6,6 +6,11 @@ const users = [
     name: 'User',
     email: 'user@nextmail.com',
     password: '123456',
+    user_type_id: 1,
+    user_level_id: 1,
+    vendor_id: null,
+    store_id: null,
+    first_login: false
   },
 ];
 
