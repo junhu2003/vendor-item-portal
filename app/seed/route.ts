@@ -1,19 +1,9 @@
+import sql from 'mssql';
 import bcryptjs from 'bcryptjs';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import { dbconfig } from '@app/lib/dbconfig';
 
-const config = {
-  user: process.env.DB_USER,      // SQL Server username
-  password: process.env.DB_PASS,  // SQL Server password
-  server: process.env.DB_HOST,    // SQL Server hostname or IP
-  database: process.env.DB_NAME,  // Database name
-  options: {
-    encrypt: true,   // Use encryption (recommended for Azure)
-    trustServerCertificate: true, // Use this if you're on a local dev machine
-  },
-};
-
-const sql = require('mssql');
-await sql.connect(config);
+await sql.connect(dbconfig);
 
 async function seedUsers() {
   
