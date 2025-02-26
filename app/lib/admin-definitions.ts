@@ -3,10 +3,10 @@ export type User = {
     name: string;
     email: string;
     password: string;
-    userTypeId: number;
-    userLevelId: number;
-    vendorId: number;
-    storeId: number;
+    userTypeId: string;
+    userLevelId: string;
+    vendorId: string;
+    storeId: string;
     firstLogin: boolean;
 };
 
@@ -26,4 +26,4 @@ export type StoreName = {
     headOfficeName: string;
     storeToken: string;
     headOfficeToken: string;
-}
+};

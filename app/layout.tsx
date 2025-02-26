@@ -1,15 +1,21 @@
+'use client'
 import '@/app/ui/global.css'
 import { inter } from '@/app/ui/fonts';
 import { Metadata } from 'next';
+import { createTheme, MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 
-export const metadata: Metadata = {
-  title: {
-    template: '%s | Acme Dashboard',
-    default: 'Acme Dashboard',
+const theme = createTheme({
+  /** Your theme override here */
+});
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      cacheTime: 1000 * 60 * 60 * 24,
+    },
   },
-  description: 'The official Next.js Course Dashboard, built with App Router.',
-  metadataBase: new URL('https://next-learn-dashboard.vercel.sh'),
-};
+})
 
 export default function RootLayout({
   children,
@@ -17,8 +23,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} antialiased`}>{children}</body>
-    </html>
+    
+      <html lang="en">
+        <body className={`${inter.className} antialiased`}>
+          <MantineProvider theme={theme}>
+            <QueryClientProvider client={queryClient}>
+              {children}
+            </QueryClientProvider>
+          </MantineProvider>
+        </body>
+      </html>
+    
   );
 }
