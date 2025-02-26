@@ -45,18 +45,16 @@ export default function Page() {
 
   useEffect(() => {
     const fetchData = async () => {
-      await fetchUserTypes()
-      .then((data) => {
-        let userTypeList: { label: string, value: string }[] = data.map((c) => {
-          return {
-            value: c.id.toString(),
-            label: c.name,            
-          };
-        });
-
-        setUserTypes(userTypeList);
-        setUserTypeLoading(false);
+      const data = await fetchUserTypes();      
+      let userTypeList: { label: string, value: string }[] = data.map((c) => {
+        return {
+          value: c.id.toString(),
+          label: c.name,            
+        };
       });
+
+      setUserTypes(userTypeList);
+      setUserTypeLoading(false);      
     };
 
     fetchData();
