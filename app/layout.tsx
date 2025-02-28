@@ -3,6 +3,7 @@ import '@/app/ui/global.css'
 import { inter } from '@/app/ui/fonts';
 import { Metadata } from 'next';
 import { createTheme, MantineProvider } from '@mantine/core';
+import { ModalsProvider } from '@mantine/modals';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 
 const theme = createTheme({
@@ -28,7 +29,9 @@ export default function RootLayout({
         <body className={`${inter.className} antialiased`}>
           <MantineProvider theme={theme}>
             <QueryClientProvider client={queryClient}>
-              {children}
+              <ModalsProvider>
+                {children}
+              </ModalsProvider>
             </QueryClientProvider>
           </MantineProvider>
         </body>

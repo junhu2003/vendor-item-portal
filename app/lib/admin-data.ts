@@ -1,6 +1,7 @@
 'use server';
 import { any, z } from 'zod';
 import sql from 'mssql';
+import bcryptjs from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
@@ -37,7 +38,72 @@ export async function getUsers(): Promise<User[]> {
     }
 }
 
-export async function getUserLevels(): Promise<UserLevel[] | undefined> {
+export async function updateUser(user: User): Promise<number> {
+    try {
+        const result = await sql.query`
+            UPDATE users
+            SET  name = ${user.name}
+                ,email = ${user.email}
+                ,password = ${user.password}
+                ,user_type_id = ${Number(user.userTypeId)}
+                ,user_level_id = ${Number(user.userLevelId)}
+                ,vendor_id = ${user.vendorId ? Number(user.vendorId) : null}
+                ,store_id = ${user.storeId ? Number(user.storeId) : null}
+                ,first_login = ${user.firstLogin}
+            WHERE id = ${user.id}
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
+}
+
+export async function deleteUser(userId: string): Promise<number> {
+    try {
+        const result = await sql.query`
+            DELETE users            
+            WHERE id = ${userId}
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
+}
+
+export async function createUser(user: User): Promise<number> {
+    try {
+        // new user default password: '123456'
+        const hashedPassword = await bcryptjs.hash('123456', 10); 
+        const result = await sql.query`
+            INSERT INTO users
+                (name
+                ,email
+                ,password
+                ,user_type_id
+                ,user_level_id
+                ,vendor_id
+                ,store_id
+                ,first_login)
+            VALUES
+                (${user.name}
+                ,${user.email}
+                ,${hashedPassword}
+                ,${Number(user.userTypeId)}
+                ,${Number(user.userLevelId)}
+                ,${user.vendorId ? Number(user.vendorId) : null}
+                ,${user.storeId ? Number(user.storeId) : null}
+                ,${true})
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
+}
+
+export async function getUserLevels(): Promise<UserLevel[]> {
     try {
         const result = await sql.query`SELECT * FROM user_level`;
         return result.recordset;

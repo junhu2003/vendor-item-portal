@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-query';
 
 import { type User, type UserType, type UserLevel } from '@/app/lib/admin-definitions'; 
-import { getUsers, getUserTypes, getUserLevels } from '@/app/lib/admin-data';
+import { getUsers, updateUser, createUser, deleteUser, getUserTypes, getUserLevels } from '@/app/lib/admin-data';
 import { number, ZodNumber } from 'zod';
 
 export default function Page() {
@@ -34,34 +34,50 @@ export default function Page() {
   const [editedUsers, setEditedUsers] = useState<Record<string, User>>({});
 
   const [userTypes, setUserTypes] = useState<{ label: string, value: string }[]>([]);
-  const [userTyoeLoading, setUserTypeLoading] = useState(true);
+  const [userLevels, setUserLevels] = useState<{ label: string, value: string }[]>([]);
 
-  const fetchUserTypes = async () => {
+  const retrieveUserTypes = async () => {
     return new Promise<UserType[]>((resolve) => {
       const userTypeList = getUserTypes();
       resolve(userTypeList);
     });
   }
 
+  const retrieveUserLevels = async () => {
+    return new Promise<UserType[]>((resolve) => {
+      const userLevelList = getUserLevels();
+      resolve(userLevelList);
+    });
+  }
+
   useEffect(() => {
     const fetchData = async () => {
-      const data = await fetchUserTypes();      
-      let userTypeList: { label: string, value: string }[] = data.map((c) => {
+      // retrieve user types
+      const userTypeData = await retrieveUserTypes();      
+      let userTypeList: { label: string, value: string }[] = userTypeData.map((c) => {
         return {
           value: c.id.toString(),
           label: c.name,            
         };
       });
+      setUserTypes(userTypeList);      
 
-      setUserTypes(userTypeList);
-      setUserTypeLoading(false);      
+      // retrieve user levels
+      const userLevelData = await retrieveUserLevels();
+      let userLevelList: { label: string, value: string }[] = userLevelData.map((c) => {
+        return {
+          value: c.id.toString(),
+          label: c.name,            
+        };
+      });
+      setUserLevels(userLevelList);      
     };
 
     fetchData();
   }, []);
 
   //call CREATE hook
-  const { mutateAsync: createUser, isLoading: isCreatingUser } =
+  const { mutateAsync: createUser, isPending: isCreatingUser } =
     useCreateUser();
   //call READ hook
   const {
@@ -71,10 +87,10 @@ export default function Page() {
     isLoading: isLoadingUsers,
   } = useGetUsers();
   //call UPDATE hook
-  const { mutateAsync: updateUsers, isLoading: isUpdatingUser } =
+  const { mutateAsync: updateUsers, isPending: isUpdatingUser } =
     useUpdateUsers();
   //call DELETE hook
-  const { mutateAsync: deleteUser, isLoading: isDeletingUser } =
+  const { mutateAsync: deleteUser, isPending: isDeletingUser } =
     useDeleteUser();
 
   //CREATE action
@@ -124,7 +140,7 @@ export default function Page() {
           required: true,
           error: validationErrors?.[cell.id],
           //store edited user in state to be saved later
-          onBlur: (event) => {
+          onBlur: (event) => {            
             const validationError = !validateRequired(event.currentTarget.value)
               ? 'Required'
               : undefined;
@@ -132,7 +148,10 @@ export default function Page() {
               ...validationErrors,
               [cell.id]: validationError,
             });
-            setEditedUsers({ ...editedUsers, [row.id]: row.original });
+            setEditedUsers({ 
+              ...editedUsers,
+              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), name: event.currentTarget.value },
+            });
           },
         }),
       },      
@@ -152,7 +171,10 @@ export default function Page() {
               ...validationErrors,
               [cell.id]: validationError,
             });
-            setEditedUsers({ ...editedUsers, [row.id]: row.original });
+            setEditedUsers({ 
+              ...editedUsers, 
+              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), email: event.currentTarget.value },
+            });
           },
         }),
       },            
@@ -167,28 +189,27 @@ export default function Page() {
           onChange: (value: any) =>
             setEditedUsers({
               ...editedUsers,
-              [row.id]: { ...row.original, userTypeId: value },
+              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), userTypeId: value },
             }),
         }),          
       },      
-      /*
       {
-        accessorKey: 'userLevel',
+        accessorKey: 'userLevelId',
         header: 'User Level',
+        editable: true,
         editVariant: 'select',
         mantineEditSelectProps: ({ row }) => ({
-          data: getUserLevels,
+          data: userLevels,
           //store edited user in state to be saved later
           onChange: (value: any) =>
             setEditedUsers({
               ...editedUsers,
-              [row.id]: { ...row.original, state: value },
+              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), userLevelId: value },
             }),
         }),
-      },
-      */
+      },      
     ],
-    [editedUsers, validationErrors, userTypes],
+    [editedUsers, validationErrors, userTypes, userLevels],
   );
 
   const table = useMantineReactTable({
@@ -215,8 +236,8 @@ export default function Page() {
     onCreatingRowSave: handleCreateUser,
     renderRowActions: ({ row }) => (
       <Tooltip label="Delete">
-        <ActionIcon color="red" onClick={() => openDeleteConfirmModal(row)}>
-          <IconTrash />
+        <ActionIcon style={{background: 'transparent'}} onClick={() => openDeleteConfirmModal(row)}>
+          <IconTrash color='red' />
         </ActionIcon>
       </Tooltip>
     ),
@@ -265,8 +286,10 @@ function useCreateUser() {
   return useMutation({
     mutationFn: async (user: User) => {
       //send api update request here
-      await new Promise((resolve) => setTimeout(resolve, 1000)); //fake api call
-      return Promise.resolve();
+      return await new Promise(async (resolve) => {        
+        const result = await createUser(user);
+        resolve(result);          
+      });  
     },
     //client side optimistic update
     onMutate: (newUserInfo: User) => {
@@ -282,7 +305,7 @@ function useCreateUser() {
           ] as User[],
       );
     },
-    // onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
   });
 }
 
@@ -308,8 +331,12 @@ function useUpdateUsers() {
   return useMutation({
     mutationFn: async (users: User[]) => {
       //send api update request here
-      await new Promise((resolve) => setTimeout(resolve, 1000)); //fake api call
-      return Promise.resolve();
+      return await new Promise((resolve) => {
+        users.forEach(async (user) => {
+          const result = await updateUser(user);
+          resolve(result);  
+        });
+      });      
     },
     //client side optimistic update
     onMutate: (newUsers: User[]) => {
@@ -322,7 +349,7 @@ function useUpdateUsers() {
           }),
       );
     },
-    // onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
   });
 }
 
@@ -332,8 +359,10 @@ function useDeleteUser() {
   return useMutation({
     mutationFn: async (userId: string) => {
       //send api update request here
-      await new Promise((resolve) => setTimeout(resolve, 1000)); //fake api call
-      return Promise.resolve();
+      return await new Promise(async (resolve) => {        
+        const result = await deleteUser(userId);
+        resolve(result);          
+      });  
     },
     //client side optimistic update
     onMutate: (userId: string) => {
@@ -343,20 +372,9 @@ function useDeleteUser() {
           prevUsers?.filter((user: User) => user.id !== userId),
       );
     },
-    // onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
   });
 }
-
-const queryClient = new QueryClient();
-
-const ExampleWithProviders = () => (
-  //Put this with your other react-query providers near root of your app
-  <QueryClientProvider client={queryClient}>
-    <ModalsProvider>
-      <Example />
-    </ModalsProvider>
-  </QueryClientProvider>
-);
 
 const validateRequired = (value: string) => !!value?.length;
 const validateEmail = (email: string) =>
@@ -369,10 +387,9 @@ const validateEmail = (email: string) =>
 
 function validateUser(user: User) {
   return {
-    firstName: !validateRequired(user.firstName)
-      ? 'First Name is Required'
-      : '',
-    lastName: !validateRequired(user.lastName) ? 'Last Name is Required' : '',
+    name: !validateRequired(user.name)
+      ? 'Name is Required'
+      : '',    
     email: !validateEmail(user.email) ? 'Incorrect Email Format' : '',
   };
 }
