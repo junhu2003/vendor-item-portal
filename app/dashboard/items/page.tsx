@@ -22,124 +22,143 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
-import { type User, type UserType, type UserLevel } from '@/app/lib/admin-definitions'; 
-import { getUsers, updateUser, createUser, deleteUser, getUserTypes, getUserLevels } from '@/app/lib/admin-data';
+import { type Department, type Category, DeptCategories, type TaxCode, type Brand, Item } from '@/app/lib/item-definitions'; 
+import { getItems, getDeptLabels, getCategoryLabels, getTaxCodeLabels, getBrandLabels } from '@/app/lib/item-data';
+
 import { number, ZodNumber } from 'zod';
 
 export default function Page() {
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string | undefined>
   >({});
-  //keep track of rows that have been edited
-  const [editedUsers, setEditedUsers] = useState<Record<string, User>>({});
+  //keep track of rows that have been edited  
+  const [editedItems, setEditedItems] = useState<Record<string, Item>>({});
 
-  const [userTypes, setUserTypes] = useState<{ label: string, value: string }[]>([]);
-  const [userLevels, setUserLevels] = useState<{ label: string, value: string }[]>([]);
-
-  const retrieveUserTypes = async () => {
-    return new Promise<UserType[]>((resolve) => {
-      const userTypeList = getUserTypes();
-      resolve(userTypeList);
-    });
-  }
-
-  const retrieveUserLevels = async () => {
-    return new Promise<UserType[]>((resolve) => {
-      const userLevelList = getUserLevels();
-      resolve(userLevelList);
-    });
-  }
+  const [depts, setDepts] = useState<{ label: string, value: string }[]>([]);
+  const [deptCategories, setDeptCategories] = useState<DeptCategories[]>([]);
+  const [taxCodes, setTaxCodes] = useState<{ label: string, value: string }[]>([]);
+  const [brands, setBrands] = useState<{ label: string, value: string }[]>([]);  
 
   useEffect(() => {
+    
     const fetchData = async () => {
-      // retrieve user types
-      const userTypeData = await retrieveUserTypes();      
-      let userTypeList: { label: string, value: string }[] = userTypeData.map((c) => {
-        return {
-          value: c.id.toString(),
-          label: c.name,            
-        };
-      });
-      setUserTypes(userTypeList);      
+      // retrieve departments
+      const deptLabels = await getDeptLabels('token');
+      setDepts(deptLabels);
 
-      // retrieve user levels
-      const userLevelData = await retrieveUserLevels();
-      let userLevelList: { label: string, value: string }[] = userLevelData.map((c) => {
-        return {
-          value: c.id.toString(),
-          label: c.name,            
-        };
-      });
-      setUserLevels(userLevelList);      
-    };
+      // retrieve categories
+      const cateLabels = await getCategoryLabels('token');
+      setDeptCategories(cateLabels);
 
+      // retrieve tax codes
+      const codeLabels = await getTaxCodeLabels('token');
+      setTaxCodes(codeLabels);
+
+      // retrieve brands
+      const brandLabels = await getBrandLabels('token');
+      setBrands(brandLabels);
+    }
     fetchData();
+
   }, []);
 
   //call CREATE hook
-  const { mutateAsync: createUser, isPending: isCreatingUser } =
-    useCreateUser();
+  const { mutateAsync: createItem, isPending: isCreatingItem } =
+    useCreateItem();
   //call READ hook
   const {
-    data: fetchedUsers = [],
-    isError: isLoadingUsersError,
-    isFetching: isFetchingUsers,
-    isLoading: isLoadingUsers,
-  } = useGetUsers();
+    data: fetchedItems = [],
+    isError: isLoadingItemsError,
+    isFetching: isFetchingItems,
+    isLoading: isLoadingItems,
+  } = useGetItems();
   //call UPDATE hook
-  const { mutateAsync: updateUsers, isPending: isUpdatingUser } =
-    useUpdateUsers();
+  const { mutateAsync: updateItems, isPending: isUpdatingItem } =
+    useUpdateItems();
   //call DELETE hook
-  const { mutateAsync: deleteUser, isPending: isDeletingUser } =
-    useDeleteUser();
+  const { mutateAsync: deleteItem, isPending: isDeletingItem } =
+    useDeleteItem();
 
   //CREATE action
-  const handleCreateUser: MRT_TableOptions<User>['onCreatingRowSave'] = async ({
+  const handleCreateItem: MRT_TableOptions<Item>['onCreatingRowSave'] = async ({
     values,
     exitCreatingMode,
   }) => {
-    const newValidationErrors = validateUser(values);
+    const newValidationErrors = validateItem(values);
     if (Object.values(newValidationErrors).some((error) => !!error)) {
       setValidationErrors(newValidationErrors);
       return;
     }
     setValidationErrors({});
-    await createUser(values);
+    await createItem(values);
     exitCreatingMode();
   };
 
   //UPDATE action
-  const handleSaveUsers = async () => {
+  const handleSaveItems = async () => {
     if (Object.values(validationErrors).some((error) => !!error)) return;
-    await updateUsers(Object.values(editedUsers));
-    setEditedUsers({});
+    await updateItems(Object.values(editedItems));
+    setEditedItems({});
   };
 
   //DELETE action
-  const openDeleteConfirmModal = (row: MRT_Row<User>) =>
+  const openDeleteConfirmModal = (row: MRT_Row<Item>) =>
     modals.openConfirmModal({
-      title: 'Are you sure you want to delete this user?',
+      title: 'Are you sure you want to delete this item?',
       children: (
         <Text>
-          Are you sure you want to delete {row.original.name}{' '}?
+          Are you sure you want to delete {row.original.itemName}{' '}?
            This action cannot be undone.
         </Text>
       ),
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },
-      onConfirm: () => deleteUser(row.original.id),
+      onConfirm: () => deleteItem(row.original.itemID.toString()),
     });
 
-  const columns = useMemo<MRT_ColumnDef<User>[]>(    
-    () => [      
+  const columns = useMemo<MRT_ColumnDef<Item>[]>(    
+    () => [
       {
-        accessorKey: 'name',
-        header: 'Name',
+        accessorKey: 'departmentID',
+        header: 'Department',
+        size: 300,
+        editable: true,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: depts,
+          //store edited item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), departmentID: value },
+            }),
+        }),          
+      },      
+      {
+        accessorKey: 'categoryID',
+        header: 'Category',
+        size: 600,
+        editable: true,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: deptCategories.find(x => x.departmentID === (editedItems[row.id] ? editedItems[row.id].departmentID : row.original.departmentID.toString()))?.categories,
+          //store edited item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), categoryID: value },
+            }),
+        }),          
+      },
+      {
+        accessorKey: 'primaryUpc',
+        header: 'UPC',
+        size: 150,
         mantineEditTextInputProps: ({ cell, row }) => ({
           type: 'text',
           required: true,
           error: validationErrors?.[cell.id],
-          //store edited user in state to be saved later
+          //store edited item in state to be saved later
           onBlur: (event) => {            
             const validationError = !validateRequired(event.currentTarget.value)
               ? 'Required'
@@ -148,80 +167,204 @@ export default function Page() {
               ...validationErrors,
               [cell.id]: validationError,
             });
-            setEditedUsers({ 
-              ...editedUsers,
-              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), name: event.currentTarget.value },
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), primaryUpc: event.currentTarget.value },
             });
           },
         }),
       },      
       {
-        accessorKey: 'email',
-        header: 'Email',
+        accessorKey: 'itemName',
+        header: 'Name',
+        size: 280,
         mantineEditTextInputProps: ({ cell, row }) => ({
-          type: 'email',
+          type: 'text',
           required: true,
           error: validationErrors?.[cell.id],
-          //store edited user in state to be saved later
-          onBlur: (event) => {
-            const validationError = !validateEmail(event.currentTarget.value)
-              ? 'Invalid Email'
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
               : undefined;
             setValidationErrors({
               ...validationErrors,
               [cell.id]: validationError,
             });
-            setEditedUsers({ 
-              ...editedUsers, 
-              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), email: event.currentTarget.value },
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemName: event.currentTarget.value },
             });
           },
         }),
-      },            
+      },
       {
-        accessorKey: 'userTypeId',
-        header: 'User Type',
-        editable: true,
-        editVariant: 'select',
-        mantineEditSelectProps: ({ row }) => ({
-          data: userTypes,          
-          //store edited user in state to be saved later
-          onChange: (value: any) =>
-            setEditedUsers({
-              ...editedUsers,
-              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), userTypeId: value },
-            }),
-        }),          
-      },      
+        accessorKey: 'itemDesc',
+        header: 'Description',
+        size: 350,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemDesc: event.currentTarget.value },
+            });
+          },
+        }),
+      },
       {
-        accessorKey: 'userLevelId',
-        header: 'User Level',
-        editable: true,
-        editVariant: 'select',
-        mantineEditSelectProps: ({ row }) => ({
-          data: userLevels,
-          //store edited user in state to be saved later
-          onChange: (value: any) =>
-            setEditedUsers({
-              ...editedUsers,
-              [row.id]: { ...(editedUsers[row.id] ? editedUsers[row.id] : row.original), userLevelId: value },
-            }),
+        accessorKey: 'unitPrice',
+        header: 'Unit Price',
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'number',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), unitPrice: Number(event.currentTarget.value) },
+            });
+          },
         }),
       },      
+      {
+        accessorKey: 'unitCost',
+        header: 'Unit Cost',
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'number',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), unitCost: Number(event.currentTarget.value) },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'taxCodeID',
+        header: 'Tax Code',
+        size: 100,
+        editable: true,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: taxCodes,          
+          //store edited item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), taxCodeID: value },
+            }),
+        }),          
+      },
+      {
+        accessorKey: 'itemType',
+        header: 'Item Type',
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemType: event.currentTarget.value },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'sts',
+        header: 'STS',
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), sts: event.currentTarget.value },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'brandID',
+        header: 'Brand',
+        size: 250,
+        editable: true,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: brands,
+          //store edited Item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), brandID: value },
+            }),
+        }),          
+      },     
+            
     ],
-    [editedUsers, validationErrors, userTypes, userLevels],
+    [editedItems, validationErrors, depts, deptCategories, taxCodes, brands],
   );
 
   const table = useMantineReactTable({
     columns,
-    data: fetchedUsers,
+    data: fetchedItems,
     createDisplayMode: 'row', // ('modal', and 'custom' are also available)
     editDisplayMode: 'table', // ('modal', 'row', 'cell', and 'custom' are also available)
     enableEditing: true,
     enableRowActions: true,
     positionActionsColumn: 'last',
-    getRowId: (row) => row.id,
-    mantineToolbarAlertBannerProps: isLoadingUsersError
+    getRowId: (row) => row.itemID ? row.itemID.toString() : undefined,
+    mantineToolbarAlertBannerProps: isLoadingItemsError
       ? {
           color: 'red',
           children: 'Error loading data',
@@ -233,7 +376,7 @@ export default function Page() {
       },
     },
     onCreatingRowCancel: () => setValidationErrors({}),
-    onCreatingRowSave: handleCreateUser,
+    onCreatingRowSave: handleCreateItem,
     renderRowActions: ({ row }) => (
       <Tooltip label="Delete">
         <ActionIcon style={{background: 'transparent'}} onClick={() => openDeleteConfirmModal(row)}>
@@ -244,12 +387,12 @@ export default function Page() {
     renderBottomToolbarCustomActions: () => (
       <Button
         color="blue"
-        onClick={handleSaveUsers}
+        onClick={handleSaveItems}
         disabled={
-          Object.keys(editedUsers).length === 0 ||
+          Object.keys(editedItems).length === 0 ||
           Object.values(validationErrors).some((error) => !!error)
         }
-        loading={isUpdatingUser}
+        loading={isUpdatingItem}
       >
         Save
       </Button>
@@ -266,113 +409,119 @@ export default function Page() {
           // );
         }}
       >
-        Create New User
+        Create New Item
       </Button>
     ),
     state: {
-      isLoading: isLoadingUsers,
-      isSaving: isCreatingUser || isUpdatingUser || isDeletingUser,
-      showAlertBanner: isLoadingUsersError,
-      showProgressBars: isFetchingUsers,
+      isLoading: isLoadingItems,
+      isSaving: isCreatingItem || isUpdatingItem || isDeletingItem,
+      showAlertBanner: isLoadingItemsError,
+      showProgressBars: isFetchingItems,
     },
   });
 
   return <MantineReactTable table={table} />;
 };
 
-//CREATE hook (post new user to api)
-function useCreateUser() {
+//CREATE hook (post new Item to api)
+function useCreateItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (user: User) => {
+    mutationFn: async (item: Item) => {
       //send api update request here
+      /*
       return await new Promise(async (resolve) => {        
-        const result = await createUser(user);
+        const result = await createItem(Item);
         resolve(result);          
-      });  
+      });
+      */  
     },
     //client side optimistic update
-    onMutate: (newUserInfo: User) => {
+    onMutate: (newItemInfo: Item) => {
       queryClient.setQueryData(
-        ['users'],
-        (prevUsers: any) =>
+        ['items'],
+        (prevItems: any) =>
           [
-            ...prevUsers,
+            ...prevItems,
             {
-              ...newUserInfo,
+              ...newItemInfo,
               id: (Math.random() + 1).toString(36).substring(7),
             },
-          ] as User[],
+          ] as Item[],
       );
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['items'] }), //refetch Items after mutation, disabled for demo
   });
 }
 
-//READ hook (get users from api)
-function useGetUsers() {
-  return useQuery<User[]>({
-    queryKey: ['users'],
+//READ hook (get items from api)
+function useGetItems() {
+  return useQuery<Item[]>({
+    queryKey: ['items'],
     queryFn: async () => {
       //send api request here      
       return await new Promise(async (resolve, reject) => {
-        const users = await getUsers();
-        resolve(users);
-        reject('Fail to fetch all users');
+        const items = await getItems();
+        resolve(items);
+        reject('Fail to fetch all items');
       });
     },
     refetchOnWindowFocus: false,
   });
 }
 
-//UPDATE hook (put users in api)
-function useUpdateUsers() {
+//UPDATE hook (put Items in api)
+function useUpdateItems() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (users: User[]) => {
+    mutationFn: async (Items: Item[]) => {
       //send api update request here
+      /*
       return await new Promise((resolve) => {
-        users.forEach(async (user) => {
-          const result = await updateUser(user);
+        Items.forEach(async (Item) => {
+          const result = await updateItem(Item);
           resolve(result);  
         });
-      });      
+      });
+      */      
     },
     //client side optimistic update
-    onMutate: (newUsers: User[]) => {
+    onMutate: (newItems: Item[]) => {
       queryClient.setQueryData(
-        ['users'],
-        (prevUsers: any) =>
-          prevUsers?.map((user: User) => {
-            const newUser = newUsers.find((u) => u.id === user.id);
-            return newUser ? newUser : user;
+        ['items'],
+        (prevItems: any) =>
+          prevItems?.map((item: Item) => {
+            const newItem = newItems.find((u) => u.itemID === item.itemID);
+            return newItem ? newItem : item;
           }),
       );
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['items'] }), //refetch Items after mutation, disabled for demo
   });
 }
 
-//DELETE hook (delete user in api)
-function useDeleteUser() {
+//DELETE hook (delete Item in api)
+function useDeleteItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async (ItemId: string) => {
       //send api update request here
+      /*
       return await new Promise(async (resolve) => {        
-        const result = await deleteUser(userId);
+        const result = await deleteItem(ItemId);
         resolve(result);          
-      });  
+      });
+      */  
     },
     //client side optimistic update
-    onMutate: (userId: string) => {
+    onMutate: (itemId: string) => {
       queryClient.setQueryData(
-        ['users'],
-        (prevUsers: any) =>
-          prevUsers?.filter((user: User) => user.id !== userId),
+        ['items'],
+        (prevItems: any) =>
+          prevItems?.filter((item: Item) => item.itemID !== item.itemID),
       );
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }), //refetch users after mutation, disabled for demo
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['items'] }), //refetch Items after mutation, disabled for demo
   });
 }
 
@@ -385,11 +534,11 @@ const validateEmail = (email: string) =>
       /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
     );
 
-function validateUser(user: User) {
+function validateItem(item: Item) {
   return {
-    name: !validateRequired(user.name)
+    name: !validateRequired(item.itemName)
       ? 'Name is Required'
       : '',    
-    email: !validateEmail(user.email) ? 'Incorrect Email Format' : '',
+    //email: !validateEmail(item.email) ? 'Incorrect Email Format' : '',
   };
 }
