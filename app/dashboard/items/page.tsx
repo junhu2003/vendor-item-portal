@@ -23,7 +23,16 @@ import {
 } from '@tanstack/react-query';
 
 import { type Department, type Category, DeptCategories, type TaxCode, type Brand, Item } from '@/app/lib/item-definitions'; 
-import { getItems, getDeptLabels, getCategoryLabels, getTaxCodeLabels, getBrandLabels } from '@/app/lib/item-data';
+import { 
+  getItems, 
+  getDeptLabels, 
+  getCategoryLabels, 
+  getTaxCodeLabels, 
+  getBrandLabels,
+  createItem,
+  updateItem,
+  deleteItem 
+} from '@/app/lib/item-data';
 
 import { number, ZodNumber } from 'zod';
 
@@ -428,13 +437,11 @@ function useCreateItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (item: Item) => {
-      //send api update request here
-      /*
+      //send api CREATE request here      
       return await new Promise(async (resolve) => {        
-        const result = await createItem(Item);
+        const result = await createItem(item);
         resolve(result);          
-      });
-      */  
+      });      
     },
     //client side optimistic update
     onMutate: (newItemInfo: Item) => {
@@ -456,7 +463,7 @@ function useCreateItem() {
 
 //READ hook (get items from api)
 function useGetItems() {
-  return useQuery<Item[]>({
+  return useQuery<Item[] | undefined>({
     queryKey: ['items'],
     queryFn: async () => {
       //send api request here      
@@ -475,15 +482,14 @@ function useUpdateItems() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (Items: Item[]) => {
-      //send api update request here
-      /*
+      //send api update request here      
       return await new Promise((resolve) => {
-        Items.forEach(async (Item) => {
-          const result = await updateItem(Item);
+        Items.forEach(async (item) => {
+          const result = await updateItem(item);
           resolve(result);  
         });
       });
-      */      
+      
     },
     //client side optimistic update
     onMutate: (newItems: Item[]) => {
@@ -504,14 +510,12 @@ function useUpdateItems() {
 function useDeleteItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (ItemId: string) => {
-      //send api update request here
-      /*
+    mutationFn: async (itemId: string) => {
+      //send api delete request here      
       return await new Promise(async (resolve) => {        
-        const result = await deleteItem(ItemId);
+        const result = await deleteItem(Number(itemId));
         resolve(result);          
-      });
-      */  
+      });    
     },
     //client side optimistic update
     onMutate: (itemId: string) => {

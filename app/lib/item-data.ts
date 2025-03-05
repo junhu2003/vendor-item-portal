@@ -51,9 +51,79 @@ export async function getItems(): Promise<Item[] | undefined> {
     } catch (error) {
         console.error('Failed to fetch user:', error);
         throw new Error('Failed to fetch user.');
-    }
+    }    
+}
 
-    
+export async function updateItem(item: Item): Promise<number> {
+    try {
+        const result = await sql.query`
+            UPDATE eItem
+            SET  CategoryID = ${item.categoryID}
+                ,PrimaryUpc = ${item.primaryUpc}
+                ,ItemName = ${item.itemName}
+                ,ItemDesc = ${item.itemDesc}
+                ,UnitPrice = ${item.unitPrice}
+                ,UnitCost = ${item.unitCost}
+                ,TaxCodeID = ${item.taxCodeID}
+                ,ItemType = ${item.itemType}
+                ,STS = ${item.sts}
+                ,BrandID = ${item.brandID}
+            WHERE ItemID = ${item.itemID}
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
+}
+
+export async function deleteItem(itemID: number): Promise<number> {
+    try {
+        const result = await sql.query`
+            DELETE eitem
+            WHERE ItemID = ${itemID}
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
+}
+
+export async function createItem(item: Item): Promise<number> {
+    try {
+        // new user default password: '123456'
+        const hashedPassword = await bcryptjs.hash('123456', 10); 
+        const result = await sql.query`
+            INSERT INTO eitem
+                (CategoryID
+                ,PrimaryUpc
+                ,ItemName
+                ,ItemDesc
+                ,UnitPrice
+                ,UnitCost
+                ,TaxCodeID
+                ,ItemType
+                ,STS
+                ,BrandID)
+            VALUES
+                (${Number(item.categoryID)}
+                ,${item.primaryUpc}
+                ,${item.itemName}
+                ,${item.itemDesc}
+                ,${item.unitPrice}
+                ,${item.unitCost}
+                ,${Number(item.taxCodeID)}
+                ,${item.itemType}
+                ,${item.sts}
+                ,${Number(item.brandID)}
+                )
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update user level:', error);
+        throw new Error('Failed to update user level.');
+    }
 }
 
 export async function getDeptLabels(publicToken: string): Promise<{label: string, value: string}[]> {
