@@ -18,7 +18,7 @@ await sql.connect(dbconfig);
 export async function getItems(): Promise<Item[] | undefined> {   
     
     try {
-        const result = await sql.query`SELECT * FROM eItem`;
+        const result = await sql.query`SELECT * FROM item`;
         if (result.recordset.length > 0) {
             let categories: Category[] = await getALLCategories('563449A5511C45FBAD060D310088AD2E');
             
@@ -32,7 +32,7 @@ export async function getItems(): Promise<Item[] | undefined> {
                         itemID: item.ItemID,
                         departmentID: departmentID,
                         categoryID: item.CategoryID.toString(),
-                        primaryUpc: item.PrimaryUpc,
+                        barcode: item.Barcode,
                         itemName: item.ItemName,
                         itemDesc: item.ItemDesc,
                         unitPrice: item.UnitPrice,
@@ -40,7 +40,10 @@ export async function getItems(): Promise<Item[] | undefined> {
                         taxCodeID: item.TaxCodeID.toString(),
                         itemType: item.ItemType,
                         sts: item.STS,
-                        brandID: item.BrandID.toString()
+                        brandID: item.BrandID.toString(),
+                        reportCode: item.ReportCode,
+                        imageFileName: null, //item.ImageFileName,
+                        imageFileData: null, //item.ImageFileData,
                     }
                 );
             });
@@ -48,67 +51,72 @@ export async function getItems(): Promise<Item[] | undefined> {
             return items;
         }
 
+        return [];
+
     } catch (error) {
-        console.error('Failed to fetch user:', error);
-        throw new Error('Failed to fetch user.');
+        console.error('Failed to fetch item:', error);
+        throw new Error('Failed to fetch item.');
     }    
 }
 
 export async function updateItem(item: Item): Promise<number> {
     try {
         const result = await sql.query`
-            UPDATE eItem
-            SET  CategoryID = ${item.categoryID}
-                ,PrimaryUpc = ${item.primaryUpc}
+            UPDATE item
+            SET  CategoryID = ${Number(item.categoryID)}                
                 ,ItemName = ${item.itemName}
                 ,ItemDesc = ${item.itemDesc}
                 ,UnitPrice = ${item.unitPrice}
                 ,UnitCost = ${item.unitCost}
-                ,TaxCodeID = ${item.taxCodeID}
+                ,TaxCodeID = ${Number(item.taxCodeID)}
                 ,ItemType = ${item.itemType}
                 ,STS = ${item.sts}
-                ,BrandID = ${item.brandID}
+                ,BrandID = ${Number(item.brandID)}
+                ,barcode = ${item.barcode}
+                ,reportCode = ${item.reportCode}
+                ,imageFileName = ${item.imageFileName}
+                ,imageFileData = ${item.imageFileData}
             WHERE ItemID = ${item.itemID}
         `;
         return result.rowsAffected[0];
     } catch (error) {
-        console.error('Failed to update user level:', error);
-        throw new Error('Failed to update user level.');
+        console.error('Failed to update item:', error);
+        throw new Error('Failed to update item.');
     }
 }
 
 export async function deleteItem(itemID: number): Promise<number> {
     try {
         const result = await sql.query`
-            DELETE eitem
+            DELETE item
             WHERE ItemID = ${itemID}
         `;
         return result.rowsAffected[0];
     } catch (error) {
-        console.error('Failed to update user level:', error);
-        throw new Error('Failed to update user level.');
+        console.error('Failed to delete item:', error);
+        throw new Error('Failed to delete item.');
     }
 }
 
 export async function createItem(item: Item): Promise<number> {
-    try {
-        // new user default password: '123456'
-        const hashedPassword = await bcryptjs.hash('123456', 10); 
+    try {        
         const result = await sql.query`
-            INSERT INTO eitem
-                (CategoryID
-                ,PrimaryUpc
-                ,ItemName
-                ,ItemDesc
-                ,UnitPrice
-                ,UnitCost
-                ,TaxCodeID
-                ,ItemType
-                ,STS
-                ,BrandID)
+            INSERT INTO item
+                ([CategoryID]
+                ,[ItemName]
+                ,[ItemDesc]
+                ,[TaxCodeID]
+                ,[UnitPrice]
+                ,[UnitCost]
+                ,[STS]
+                ,[ItemType]
+                ,[BrandID]
+                ,[Barcode]
+                ,[ReportCode]
+                ,[ImageFileName]
+                ,[ImageFileData])
             VALUES
                 (${Number(item.categoryID)}
-                ,${item.primaryUpc}
                 ,${item.itemName}
                 ,${item.itemDesc}
                 ,${item.unitPrice}
@@ -117,12 +125,15 @@ export async function createItem(item: Item): Promise<number> {
                 ,${item.itemType}
                 ,${item.sts}
                 ,${Number(item.brandID)}
-                )
-        `;
+                ,${item.barcode}
+                ,${item.reportCode}
+                ,${item.imageFileName}
+                ,${item.imageFileData})`;
+
         return result.rowsAffected[0];
     } catch (error) {
-        console.error('Failed to update user level:', error);
-        throw new Error('Failed to update user level.');
+        console.error('Failed to insert new item:', error);
+        throw new Error('Failed to insert new item.');
     }
 }
 
