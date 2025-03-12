@@ -45,6 +45,14 @@ export type Brand = {
     brandDesc: string
 }
 
+export type ReportCode = {
+	reportCodeID: number,
+	reportCodeName: string,
+	reportCodeDesc: string,
+	uid: number,
+	reportSyncCode: string
+}
+
 export type DeptCategories = {
     departmentID: string,
     categories: { label: string, value: string }[]

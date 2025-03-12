@@ -7,8 +7,8 @@ import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 import { dbconfig } from '@/app/lib/dbconfig';
-import { Department, Category, DeptCategories, Item, TaxCode, Brand } from './item-definitions';
-import { getDepartments, getALLCategories, getCategoriesByDept, getTaxCodes, getBrands } from './applicationApi';
+import { Department, Category, DeptCategories, Item, TaxCode, Brand, ReportCode } from './item-definitions';
+import { getDepartments, getALLCategories, getTaxCodes, getBrands, getReportCodes } from './applicationApi';
 
 // temporary set it to make localhost API working
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -195,6 +195,19 @@ export async function getBrandLabels(publicToken: string): Promise<{label: strin
             new Map(brands.map(brand => [brand.brandName, {
                 label: brand.brandName,
                 value: brand.brandID.toString()
+            }])).values()
+        );
+        resolve(uniqueList);
+    });
+}
+
+export async function getReportCodeLabels(publicToken: string): Promise<{label: string, value: string}[]> {
+    return new Promise<{label: string, value: string}[]>(async (resolve) => {
+        const codes: ReportCode[] = await getReportCodes(publicToken);
+        const uniqueList = Array.from(
+            new Map(codes.map(code => [code.reportCodeName, {
+                label: code.reportCodeName,
+                value: code.reportCodeID.toString()
             }])).values()
         );
         resolve(uniqueList);

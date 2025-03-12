@@ -11,9 +11,9 @@ import {
   type MRT_TableOptions,
   useMantineReactTable,
 } from 'mantine-react-table';
-import { ActionIcon, Button, Text, Tooltip, FileInput } from '@mantine/core';
+import { ActionIcon, Button, Text, Tooltip, FileInput, MultiSelect } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { IconTrash, IconFile, IconSend } from '@tabler/icons-react';
+import { IconTrash, IconSend, IconFileImport } from '@tabler/icons-react';
 import {  
   useMutation,
   useQuery,
@@ -27,6 +27,7 @@ import {
   getCategoryLabels, 
   getTaxCodeLabels, 
   getBrandLabels,
+  getReportCodeLabels,
   createItem,
   updateItem,
   deleteItem 
@@ -43,6 +44,7 @@ export default function Page() {
   const [deptCategories, setDeptCategories] = useState<DeptCategories[]>([]);
   const [taxCodes, setTaxCodes] = useState<{ label: string, value: string }[]>([]);
   const [brands, setBrands] = useState<{ label: string, value: string }[]>([]); 
+  const [rptCodes, setRptCodes] = useState<{ label: string, value: string }[]>([]); 
   
   const fileInputRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
@@ -89,6 +91,10 @@ export default function Page() {
       // retrieve brands
       const brandLabels = await getBrandLabels('token');
       setBrands(brandLabels);
+
+      // retrieve report codes
+      const rptCodeLabels = await getReportCodeLabels('token');
+      setRptCodes(rptCodeLabels);
     }
     fetchData();
 
@@ -396,55 +402,55 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
         }),          
       },
       {
-        accessorKey: 'reportCode',
-        header: 'Report Code',
-        size: 100,
-        mantineEditTextInputProps: ({ cell, row }) => ({
-          type: 'text',
-          required: true,
-          error: validationErrors?.[cell.id],
-          //store edited item in state to be saved later
-          onBlur: (event) => {            
-            const validationError = !validateRequired(event.currentTarget.value)
-              ? 'Required'
-              : undefined;
-            setValidationErrors({
-              ...validationErrors,
-              [cell.id]: validationError,
-            });
-            setEditedItems({ 
-              ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), reportCode: event.currentTarget.value },
-            });
-          },
-        }),
+        accessorKey: "reportCode",
+        header: "Report Codes",
+        size: 500, 
+        enableEditing: false,
+        Cell: ({ row }) => {
+          const curItem = editedItems[row.id] ? editedItems[row.id] : row.original;
+          return (            
+            <MultiSelect
+              data={rptCodes}
+              value={curItem.reportCode ? curItem.reportCode.split(',') : []}
+              onChange={(value: any) => {
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(curItem), reportCode: value.join(',')},
+                });                
+              }}
+              placeholder="Select options"
+              searchable
+              clearable              
+            />            
+          );
+        },        
       },
       {
-            accessorKey: "imageFileName",
-            header: "File",
-            size: 80,
-            enableEditing: false, // Prevent editing for file column
-            Cell: ({ row }) => {              
-              return (
-                <>
-                  <Tooltip label="Select image file">
-                    <ActionIcon style={{background: 'transparent'}} onClick={() => openFileExplorer(row.id)}>
-                      <IconFile color='blue' />
-                    </ActionIcon>
-                  </Tooltip>
-                  <FileInput                    
-                    ref={(el) => (fileInputRefs.current[row.id] = el)}
-                    placeholder="Select image file"   
-                    accept="image/png,image/jpeg"               
-                    onChange={(file) => handleFileChange(file, row)}
-                    style={{display: 'none'}}
-                  />
-                </>
-              );
-            },
-          },
+        accessorKey: "imageFileName",
+        header: "File",
+        size: 80,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ row }) => {              
+          return (
+            <>
+              <Tooltip label="Select image file">
+                <ActionIcon style={{background: 'transparent'}} onClick={() => openFileExplorer(row.id)}>
+                  <IconFileImport color='blue' />
+                </ActionIcon>
+              </Tooltip>
+              <FileInput                    
+                ref={(el) => (fileInputRefs.current[row.id] = el)}
+                placeholder="Select image file"   
+                accept="image/png,image/jpeg"               
+                onChange={(file) => handleFileChange(file, row)}
+                style={{display: 'none'}}
+              />
+            </>
+          );
+        },
+      },
     ],
-    [editedItems, validationErrors, depts, deptCategories, taxCodes, brands],
+    [editedItems, validationErrors, depts, deptCategories, taxCodes, brands, rptCodes],
   );
 
   const table = useMantineReactTable({
