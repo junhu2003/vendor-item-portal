@@ -7,8 +7,8 @@ import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 import { dbconfig } from '@/app/lib/dbconfig';
-import { Department, Category, DeptCategories, Item, TaxCode, Brand, ReportCode } from './item-definitions';
-import { getDepartments, getALLCategories, getTaxCodes, getBrands, getReportCodes } from './applicationApi';
+import { Department, Category, DeptCategories, Item, TaxCode, Brand, ReportCode, ExtItems, ExtItemResponse, SendItemHistory, SendItemStatus } from './item-definitions';
+import { getDepartments, getALLCategories, getTaxCodes, getBrands, getReportCodes, postItems } from './applicationApi';
 
 // temporary set it to make localhost API working
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -18,7 +18,38 @@ await sql.connect(dbconfig);
 export async function getItems(): Promise<Item[] | undefined> {   
     
     try {
-        const result = await sql.query`SELECT * FROM item`;
+        const result = await sql.query`SELECT [ItemID]
+                    ,[CategoryID]
+                    ,[ItemName]
+                    ,[ItemDesc]
+                    ,[TaxCodeID]
+                    ,[UnitPrice]
+                    ,[UnitCost]
+                    ,[STS]
+                    ,[ItemType]
+                    ,[BrandID]
+                    ,[Barcode]
+                    ,[ReportCode]
+                    ,[ImageFileName]
+                    ,[ImageFileData]
+                    , hs.[SdItemID]
+                    , hs.Status
+                    , hs.ResponseMsg
+                FROM [Vendor_Portal].[dbo].[item] t
+                LEFT Join (SELECT TOP 1 h.[id]
+                    ,[ExtItemID]
+                    ,[SdItemID]
+                    ,[StatusID]
+                    ,[ResponseMsg]
+                    ,[SendUserID]
+                    ,[SendDate]
+                    , s.Status
+                FROM [Vendor_Portal].[dbo].[sendItemHistory] h
+                INNER JOIN SendItemStatus s
+                ON h.StatusID = s.id
+                ORDER BY SendDate DESC) hs
+                ON t.ItemID = hs.ExtItemID`;
+
         if (result.recordset.length > 0) {
             let categories: Category[] = await getALLCategories('563449A5511C45FBAD060D310088AD2E');
             
@@ -42,8 +73,11 @@ export async function getItems(): Promise<Item[] | undefined> {
                         sts: item.STS,
                         brandID: item.BrandID.toString(),
                         reportCode: item.ReportCode,
-                        imageFileName: null, //item.ImageFileName,
-                        imageFileData: null, //item.ImageFileData,
+                        imageFileName: item.ImageFileName,
+                        imageFileData: item.ImageFileData,
+                        sdItemID: item.SdItemID,
+                        status: item.Status,
+                        resResponseMsg: item.ResponseMsg
                     }
                 );
             });
@@ -98,7 +132,7 @@ export async function deleteItem(itemID: number): Promise<number> {
     }
 }
 
-export async function createItem(item: Item): Promise<number> {
+export async function createNewItem(item: Item): Promise<number> {
     try {        
         const result = await sql.query`
             INSERT INTO item
@@ -119,8 +153,8 @@ export async function createItem(item: Item): Promise<number> {
                 (${Number(item.categoryID)}
                 ,${item.itemName}
                 ,${item.itemDesc}
-                ,${item.unitPrice}
-                ,${item.unitCost}
+                ,${Number(item.unitPrice)}
+                ,${Number(item.unitCost)}
                 ,${Number(item.taxCodeID)}
                 ,${item.itemType}
                 ,${item.sts}
@@ -134,6 +168,29 @@ export async function createItem(item: Item): Promise<number> {
     } catch (error) {
         console.error('Failed to insert new item:', error);
         throw new Error('Failed to insert new item.');
+    }
+}
+
+export async function createSendItemHistory(history: SendItemHistory): Promise<number> {
+    try {        
+        const result = await sql.query`
+            INSERT INTO [dbo].[sendItemHistory]
+                ([ExtItemID]
+                ,[SdItemID]
+                ,[StatusID]
+                ,[ResponseMsg]
+                ,[SendUserID])
+            VALUES
+                (${history.extItemID}
+                ,${history.sdItemID}
+                ,${history.statusID}
+                ,${history.responseMsg}
+                ,${history.sendUserID})`;
+
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to insert new send item history:', error);
+        throw new Error('Failed to insert new send item history.');
     }
 }
 
@@ -211,5 +268,12 @@ export async function getReportCodeLabels(publicToken: string): Promise<{label: 
             }])).values()
         );
         resolve(uniqueList);
+    });
+}
+
+export async function postItemsToSD(extItems: ExtItems): Promise<ExtItemResponse[]> {
+    return new Promise<ExtItemResponse[]>(async (resolve) => {
+        const responses: ExtItemResponse[] = await postItems(extItems);        
+        resolve(responses);
     });
 }

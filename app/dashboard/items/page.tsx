@@ -20,7 +20,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
-import { DeptCategories, Item } from '@/app/lib/item-definitions'; 
+import { DeptCategories, ExtItems, Item, ExtItemResponse, SendItemHistory } from '@/app/lib/item-definitions'; 
 import { 
   getItems, 
   getDeptLabels, 
@@ -28,9 +28,11 @@ import {
   getTaxCodeLabels, 
   getBrandLabels,
   getReportCodeLabels,
-  createItem,
+  createNewItem,
   updateItem,
-  deleteItem 
+  deleteItem,
+  postItemsToSD,
+  createSendItemHistory 
 } from '@/app/lib/item-data';
 
 export default function Page() {
@@ -119,6 +121,7 @@ export default function Page() {
 
   //CREATE action
   const handleCreateItem: MRT_TableOptions<Item>['onCreatingRowSave'] = async ({
+    row,
     values,
     exitCreatingMode,
   }) => {
@@ -128,7 +131,7 @@ export default function Page() {
       return;
     }
     setValidationErrors({});
-    await createItem(values);
+    await createItem(editedItems[row.id]);
     exitCreatingMode();
   };
 
@@ -160,14 +163,39 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
     title: 'SEND ITEM TO SD',
     children: (
       <Text>
-        Are you sure you want to send {row.original.itemName} to SD?
-        
+        Are you sure you want to send {row.original.itemName} to SD?        
       </Text>
     ),
     labels: { confirm: 'Send', cancel: 'Cancel' },
     confirmProps: { color: 'green' },
-    //onConfirm: () => deleteItem(row.original.itemID.toString()),
-  });    
+    onConfirm: () => sendItemToSD(row.original),
+  });
+
+  const sendItemToSD = async (extItem: Item) => {
+    const extItems: ExtItems = {
+      publicKey: '563449A5511C45FBAD060D310088AD2E',
+      extItems: [extItem]
+    };
+    const responses: ExtItemResponse[] = await postItemsToSD(extItems);
+
+    responses.forEach((res: ExtItemResponse) => {
+      new Promise(async (resolve) => {
+        const history: SendItemHistory = {
+            id: 0,
+            extItemID: res.extItemID,
+            sdItemID:  res.sdItemID,
+            statusID: res.status === 'Successed' ? 1 : 2,
+            responseMsg: res.message,
+            sendUserID: '410544B2-4001-4271-9855-FEC4B6A6442A',
+            sendDate: new Date(),
+        };
+        
+        const result = await createSendItemHistory(history);
+        resolve(result);
+      });
+    });
+    
+  }
 
   const columns = useMemo<MRT_ColumnDef<Item>[]>(    
     () => [
@@ -449,6 +477,30 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
           );
         },
       },
+      {
+        accessorKey: 'status',
+        header: 'Send Status',
+        enableEditing: false,
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',          
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), status: event.currentTarget.value },
+            });
+          },
+        }),
+      },
     ],
     [editedItems, validationErrors, depts, deptCategories, taxCodes, brands, rptCodes],
   );
@@ -535,7 +587,7 @@ function useCreateItem() {
     mutationFn: async (item: Item) => {
       //send api CREATE request here      
       return await new Promise(async (resolve) => {        
-        const result = await createItem(item);
+        const result = await createNewItem(item);
         resolve(result);          
       });      
     },

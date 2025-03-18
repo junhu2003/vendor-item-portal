@@ -1,6 +1,6 @@
 'use server'
 
-import { Department, Category, TaxCode, Brand, ReportCode } from "./item-definitions";
+import { Department, Category, TaxCode, Brand, ReportCode, ExtItems, ExtItemResponse } from "./item-definitions";
 
 const baseUrl = 'https://localhost:7252'; // 'https://test-sd-api.azurewebsites.net'; // 
 const token = '563449A5511C45FBAD060D310088AD2E';
@@ -124,5 +124,19 @@ export async function getReportCodes(publicToken: string): Promise<ReportCode[]>
             Accept: 'application/json',
             'Content-Type': 'application/json',
         }});
+    return response.json();
+}
+
+export async function postItems(extItems: ExtItems): Promise<ExtItemResponse[]> {
+    var reqUrl = baseUrl + '/api/SdItem/v1/PostItems';
+    const response = await fetch(reqUrl, { 
+        method: 'POST', 
+        credentials: 'include', 
+        mode: 'cors', 
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }, 
+        body: JSON.stringify(extItems)});    
     return response.json();
 }

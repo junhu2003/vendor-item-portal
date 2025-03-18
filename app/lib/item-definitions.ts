@@ -1,3 +1,5 @@
+import { DateTime } from "next-auth/providers/kakao";
+
 export type Department = {
     departmentID: number;
     departmentName: string;
@@ -63,7 +65,8 @@ export type Item = {
     departmentID: number;
     categoryID: number;    
     itemName: string;
-    itemDesc: string;    
+    itemDesc: string;
+    itemNumber?: string;
     taxCodeID: number;    
     unitPrice: number;
     unitCost: number;
@@ -72,6 +75,36 @@ export type Item = {
     brandID: number;
     barcode: string;
 	reportCode: string;
-	imageFileName: string;
-	imageFileData: string;
+	imageFileName?: string;
+	imageFileData?: string;
+    sdItemID?: number;
+    status?: string;
+    responseMsg?: string;
 };
+
+export type ExtItems = {
+    publicKey: string;
+    extItems: Item[]; 
+}
+
+export type ExtItemResponse = {
+    extItemID: number;
+    sdItemID: number;
+    message: string;
+    status: string;
+}
+
+export type SendItemHistory = {
+    id: number;
+    extItemID: number;
+    sdItemID:  number;
+    statusID: number;
+    responseMsg: string;
+    sendUserID: string;
+    sendDate: Date;
+}
+
+export type SendItemStatus = {
+    id: number;
+    status: string;
+}
