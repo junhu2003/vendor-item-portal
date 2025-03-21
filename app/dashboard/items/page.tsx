@@ -8,10 +8,11 @@ import {
   // createRow,
   type MRT_ColumnDef,
   type MRT_Row,
+  type MRT_Cell,
   type MRT_TableOptions,
   useMantineReactTable,
 } from 'mantine-react-table';
-import { ActionIcon, Button, Text, Tooltip, FileInput, MultiSelect } from '@mantine/core';
+import { ActionIcon, Button, Text, Tooltip, FileInput, MultiSelect, Switch } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { IconTrash, IconSend, IconFileImport } from '@tabler/icons-react';
 import {  
@@ -28,26 +29,53 @@ import {
   getTaxCodeLabels, 
   getBrandLabels,
   getReportCodeLabels,
+  getItemTypeLabels,
+  getItemStatusLabels,
   createNewItem,
   updateItem,
   deleteItem,
   postItemsToSD,
-  createSendItemHistory 
+  createSendItemHistory, 
+  updateItemByResponse,
+  checkBarcodeDuplication,
+  checkItemNumberDuplication
 } from '@/app/lib/item-data';
 
 export default function Page() {
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string | undefined>
   >({});
+
+  const queryClient = useQueryClient();
+
   //keep track of rows that have been edited  
-  const [editedItems, setEditedItems] = useState<Record<string, Item>>({});
+  const [editedItems, setEditedItems] = useState<Record<string, Item>>({});  
 
   const [depts, setDepts] = useState<{ label: string, value: string }[]>([]);
   const [deptCategories, setDeptCategories] = useState<DeptCategories[]>([]);
   const [taxCodes, setTaxCodes] = useState<{ label: string, value: string }[]>([]);
   const [brands, setBrands] = useState<{ label: string, value: string }[]>([]); 
   const [rptCodes, setRptCodes] = useState<{ label: string, value: string }[]>([]); 
+  const [itemTypes, setItemTypes] = useState<{ label: string, value: string }[]>([]);
+  const [itemStatuses, setItemStatuses] = useState<{ label: string, value: string }[]>([]);
+
+  // manage item temporary switch state
+  const [switchtates, setSwitchtates] = useState<{ 
+    manualPrice: Boolean, 
+    discountable: Boolean, 
+    inventory: Boolean,
+    availableOnWeb: Boolean,
+    btlDepositInPrice: Boolean,
+    btlDepositInCost: Boolean,
+    ecoFeeInPrice: Boolean,
+    ecoFeeInCost: Boolean    
+   }[]>([]);
   
+  const isSwitched = (cell: MRT_Cell<Item, unknown>, key: string, row: MRT_Row<Item>): Boolean => {
+    return switchtates[row.original.itemID] && Object.hasOwn(switchtates[row.original.itemID], key) 
+              ? switchtates[row.original.itemID][key] : cell.getValue();
+  } 
+
   const fileInputRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -97,6 +125,15 @@ export default function Page() {
       // retrieve report codes
       const rptCodeLabels = await getReportCodeLabels('token');
       setRptCodes(rptCodeLabels);
+
+      // retrieve item types
+      const itemTypeLabels = await getItemTypeLabels();      
+      setItemTypes(itemTypeLabels);
+
+      // retrieve item statuses
+      const itemStatusLabels = await getItemStatusLabels();
+      setItemStatuses(itemStatusLabels);
+      
     }
     fetchData();
 
@@ -172,6 +209,8 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
   });
 
   const sendItemToSD = async (extItem: Item) => {
+
+    extItem.lastSendDate = extItem.lastSendDate ? new Date(extItem.lastSendDate) : undefined;
     const extItems: ExtItems = {
       publicKey: '563449A5511C45FBAD060D310088AD2E',
       extItems: [extItem]
@@ -180,77 +219,75 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
 
     responses.forEach((res: ExtItemResponse) => {
       new Promise(async (resolve) => {
+        
+        const result1 = await updateItemByResponse(res);
+
         const history: SendItemHistory = {
             id: 0,
             extItemID: res.extItemID,
-            sdItemID:  res.sdItemID,
-            statusID: res.status === 'Successed' ? 1 : 2,
+            action: res.action,
+            status: res.status,
             responseMsg: res.message,
             sendUserID: '410544B2-4001-4271-9855-FEC4B6A6442A',
-            sendDate: new Date(),
+            sendDate: res.sendDate,
         };
         
-        const result = await createSendItemHistory(history);
-        resolve(result);
+        const result2 = await createSendItemHistory(history);
+        resolve({result1, result2});
       });
     });
-    
+
+    await queryClient.invalidateQueries(['items'])
   }
 
   const columns = useMemo<MRT_ColumnDef<Item>[]>(    
-    () => [
-      {
-        accessorKey: 'departmentID',
-        header: 'Department',
-        size: 300,
-        editable: true,
-        editVariant: 'select',
-        mantineEditSelectProps: ({ row }) => ({
-          data: depts,
-          //store edited item in state to be saved later
-          onChange: (value: any) =>
-            setEditedItems({
-              ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), departmentID: value },
-            }),
-        }),          
-      },      
-      {
-        accessorKey: 'categoryID',
-        header: 'Category',
-        size: 600,
-        editable: true,
-        editVariant: 'select',
-        mantineEditSelectProps: ({ row }) => ({
-          data: deptCategories.find(x => x.departmentID === (editedItems[row.id] ? editedItems[row.id].departmentID : row.original.departmentID.toString()))?.categories,
-          //store edited item in state to be saved later
-          onChange: (value: any) =>
-            setEditedItems({
-              ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), categoryID: value },
-            }),
-        }),          
-      },
+    () => [      
       {
         accessorKey: 'barcode',
         header: 'Barcode',
-        size: 150,
+        size: 180,
         mantineEditTextInputProps: ({ cell, row }) => ({
           type: 'text',
           required: true,
           error: validationErrors?.[cell.id],
           //store edited item in state to be saved later
-          onBlur: (event) => {            
-            const validationError = !validateRequired(event.currentTarget.value)
-              ? 'Required'
-              : undefined;
+          onBlur: async (event) => {
+            const currentValue = event.currentTarget.value;
+            const validationError = await validateBarcodeDuplication(currentValue) 
+                ? 'Duplicate Barcodes' 
+                : undefined;
             setValidationErrors({
               ...validationErrors,
               [cell.id]: validationError,
             });
             setEditedItems({ 
               ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), barcode: event.currentTarget.value },
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), barcode: currentValue},
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'itemNumber',
+        header: 'Item Number',
+        size: 180,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',
+          required: true,
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: async (event) => {
+            const currentValue = event.currentTarget.value;
+            const validationError = await validateItemNumberDuplication(currentValue) 
+                ? 'Duplicate Barcodes' 
+                : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemNumber: currentValue},
             });
           },
         }),
@@ -352,6 +389,36 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
         }),
       },
       {
+        accessorKey: 'departmentID',
+        header: 'Department',
+        size: 300,        
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: depts,
+          //store edited item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), departmentID: value },
+            }),
+        }),          
+      },      
+      {
+        accessorKey: 'categoryID',
+        header: 'Category',
+        size: 600,        
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: deptCategories.find(x => x.departmentID === (editedItems[row.id] ? editedItems[row.id].departmentID : row.original.departmentID.toString()))?.categories,
+          //store edited item in state to be saved later
+          onChange: (value: any) =>
+            setEditedItems({
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), categoryID: value },
+            }),
+        }),          
+      },
+      {
         accessorKey: 'taxCodeID',
         header: 'Tax Code',
         size: 100,        
@@ -368,50 +435,32 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
       },
       {
         accessorKey: 'itemType',
-        header: 'Item Type',
-        size: 100,
-        mantineEditTextInputProps: ({ cell, row }) => ({
-          type: 'text',
-          required: true,
-          error: validationErrors?.[cell.id],
+        header: 'Item Type',        
+        size: 200,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: itemTypes,
           //store edited item in state to be saved later
-          onBlur: (event) => {            
-            const validationError = !validateRequired(event.currentTarget.value)
-              ? 'Required'
-              : undefined;
-            setValidationErrors({
-              ...validationErrors,
-              [cell.id]: validationError,
-            });
-            setEditedItems({ 
+          onChange: (value: any) =>
+            setEditedItems({
               ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemType: event.currentTarget.value },
-            });
-          },
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), itemType: value },
+            }),
         }),
       },
       {
         accessorKey: 'sts',
         header: 'STS',
-        size: 100,
-        mantineEditTextInputProps: ({ cell, row }) => ({
-          type: 'text',
-          required: true,
-          error: validationErrors?.[cell.id],
+        size: 180,
+        editVariant: 'select',
+        mantineEditSelectProps: ({ row }) => ({
+          data: itemStatuses,
           //store edited item in state to be saved later
-          onBlur: (event) => {            
-            const validationError = !validateRequired(event.currentTarget.value)
-              ? 'Required'
-              : undefined;
-            setValidationErrors({
-              ...validationErrors,
-              [cell.id]: validationError,
-            });
-            setEditedItems({ 
+          onChange: (value: any) =>
+            setEditedItems({
               ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), sts: event.currentTarget.value },
-            });
-          },
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), sts: value },
+            }),
         }),
       },
       {
@@ -478,8 +527,200 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
         },
       },
       {
-        accessorKey: 'status',
-        header: 'Send Status',
+        accessorKey: 'manualPrice',
+        header: 'Manual Price',
+        size: 60,        
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'manualPrice', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], manualPrice: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), manualPrice: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'discountable',
+        header: 'Discountable',
+        size: 60,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'discountable', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], discountable: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), discountable: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'inventory',
+        header: 'Track Inventory',
+        size: 60,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'inventory', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], inventory: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), inventory: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'availableOnWeb',
+        header: 'Available On Web',
+        size: 60,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'availableOnWeb', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], availableOnWeb: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), availableOnWeb: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'btlDepositInPrice',
+        header: 'Bottle Deposit Included In Price',
+        size: 200,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'btlDepositInPrice', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], btlDepositInPrice: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), btlDepositInPrice: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'btlDepositInCost',
+        header: 'Bottle Deposit Included In Cost',
+        size: 200,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'btlDepositInCost', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], btlDepositInCost: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), btlDepositInCost: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'ecoFeeInPrice',
+        header: 'Eco Fee Included In Price',
+        size: 200,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'ecoFeeInPrice', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], ecoFeeInPrice: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), ecoFeeInPrice: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'ecoFeeInCost',
+        header: 'Eco Fee Included In Cost',
+        size: 200,
+        enableEditing: false, // Prevent editing for file column
+        Cell: ({ cell, row }) => {          
+          return (            
+            <Switch
+              checked={isSwitched(cell, 'ecoFeeInCost', row)}
+              onChange={(event: any) => {
+                const status = event.currentTarget.checked;
+                setSwitchtates({ 
+                  ...switchtates, 
+                  [row.original.itemID]: {...switchtates[row.original.itemID], ecoFeeInCost: status}
+                });                
+                setEditedItems({
+                  ...editedItems,
+                  [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), ecoFeeInCost: status },
+                });
+              }}
+            />
+          );
+        },        
+      },
+      {
+        accessorKey: 'sdItemID',
+        header: 'SD Item ID',
         enableEditing: false,
         size: 100,
         mantineEditTextInputProps: ({ cell, row }) => ({
@@ -496,13 +737,85 @@ const openSendToSDConfirmModal = (row: MRT_Row<Item>) =>
             });
             setEditedItems({ 
               ...editedItems,
-              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), status: event.currentTarget.value },
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), sdItemID: Number(event.currentTarget.value) },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'lastAction',
+        header: 'Action',
+        enableEditing: false,
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',          
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), lastAction: event.currentTarget.value },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'lastStatus',
+        header: 'Status',
+        enableEditing: false,
+        size: 100,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'text',          
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), lastStatus: event.currentTarget.value },
+            });
+          },
+        }),
+      },
+      {
+        accessorKey: 'lastSendDate',
+        header: 'Send Date',
+        enableEditing: false,
+        size: 200,
+        mantineEditTextInputProps: ({ cell, row }) => ({
+          type: 'Date',          
+          error: validationErrors?.[cell.id],
+          //store edited item in state to be saved later
+          onBlur: (event) => {            
+            const validationError = !validateRequired(event.currentTarget.value)
+              ? 'Required'
+              : undefined;
+            setValidationErrors({
+              ...validationErrors,
+              [cell.id]: validationError,
+            });
+            setEditedItems({ 
+              ...editedItems,
+              [row.id]: { ...(editedItems[row.id] ? editedItems[row.id] : row.original), lastSendDate: new Date(event.currentTarget.value) },
             });
           },
         }),
       },
     ],
-    [editedItems, validationErrors, depts, deptCategories, taxCodes, brands, rptCodes],
+    [editedItems, validationErrors, depts, deptCategories, taxCodes, brands, rptCodes, itemTypes, itemStatuses],
   );
 
   const table = useMantineReactTable({
@@ -586,7 +899,8 @@ function useCreateItem() {
   return useMutation({
     mutationFn: async (item: Item) => {
       //send api CREATE request here      
-      return await new Promise(async (resolve) => {        
+      return await new Promise(async (resolve) => {
+        item.createUserID = '410544B2-4001-4271-9855-FEC4B6A6442A';        
         const result = await createNewItem(item);
         resolve(result);          
       });      
@@ -678,6 +992,8 @@ function useDeleteItem() {
 }
 
 const validateRequired = (value: string) => !!value?.length;
+const validateBarcodeDuplication = async (barcode: string) => await checkBarcodeDuplication('token', barcode);
+const validateItemNumberDuplication = async (barcode: string) => await checkItemNumberDuplication('token', barcode);
 const validateEmail = (email: string) =>
   !!email.length &&
   email

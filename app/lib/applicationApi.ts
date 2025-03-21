@@ -127,6 +127,62 @@ export async function getReportCodes(publicToken: string): Promise<ReportCode[]>
     return response.json();
 }
 
+export async function barcodesDuplicationCheck(publicToken: string, barcodeString: string): Promise<boolean> {    
+    var reqUrl = baseUrl + '/api/SdItem/v1/BarcodesDuplicationCheck?publicToken=' + token + '&barcodeString=' + barcodeString; // hard coding token for now
+    //var reqUrl = baseUrl + '/api/SdItem/v1/BarcodesDuplicationCheck?publicToken=' + publicToken + '&barcodeString=' + barcodeString;
+    const response = await fetch(reqUrl, { 
+        method: 'GET', 
+        credentials: 'include', 
+        mode: 'cors', 
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }});
+    const text = await response.text();
+    return text === 'true';
+}
+
+export async function itemNumberDuplicationCheck(publicToken: string, itemNumber: string): Promise<boolean> {    
+    var reqUrl = baseUrl + '/api/SdItem/v1/ItemNumberDuplicationCheck?publicToken=' + token + '&itemNumber=' + itemNumber; // hard coding token for now
+    //var reqUrl = baseUrl + '/api/SdItem/v1/ItemNumberDuplicationCheck?publicToken=' + publicToken + '&itemNumber=' + itemNumber;
+    const response = await fetch(reqUrl, { 
+        method: 'GET', 
+        credentials: 'include', 
+        mode: 'cors', 
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }});
+    const text = await response.text();
+    return text === 'true';
+}
+
+export async function getItemTypes(): Promise<string[]> {    
+    var reqUrl = baseUrl + '/api/SdItem/v1/GetItemTypes';    
+    const response = await fetch(reqUrl, { 
+        method: 'GET', 
+        credentials: 'include', 
+        mode: 'cors', 
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }});
+    return response.json();
+}
+
+export async function getItemStatuses(): Promise<string[]> {    
+    var reqUrl = baseUrl + '/api/SdItem/v1/GetItemStatuses';
+    const response = await fetch(reqUrl, { 
+        method: 'GET', 
+        credentials: 'include', 
+        mode: 'cors', 
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }});
+    return response.json();
+}
+
 export async function postItems(extItems: ExtItems): Promise<ExtItemResponse[]> {
     var reqUrl = baseUrl + '/api/SdItem/v1/PostItems';
     const response = await fetch(reqUrl, { 

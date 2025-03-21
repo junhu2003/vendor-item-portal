@@ -7,8 +7,26 @@ import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 import { dbconfig } from '@/app/lib/dbconfig';
-import { Department, Category, DeptCategories, Item, TaxCode, Brand, ReportCode, ExtItems, ExtItemResponse, SendItemHistory, SendItemStatus } from './item-definitions';
-import { getDepartments, getALLCategories, getTaxCodes, getBrands, getReportCodes, postItems } from './applicationApi';
+import { Department, 
+    Category, 
+    DeptCategories, 
+    Item, 
+    TaxCode, 
+    Brand, 
+    ReportCode, 
+    ExtItems, 
+    ExtItemResponse, 
+    SendItemHistory } from './item-definitions';
+import { getDepartments, 
+    getALLCategories, 
+    getTaxCodes, 
+    getBrands, 
+    getReportCodes, 
+    getItemTypes,
+    getItemStatuses,
+    postItems,
+    barcodesDuplicationCheck,
+    itemNumberDuplicationCheck } from './applicationApi';
 
 // temporary set it to make localhost API working
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -22,33 +40,30 @@ export async function getItems(): Promise<Item[] | undefined> {
                     ,[CategoryID]
                     ,[ItemName]
                     ,[ItemDesc]
+                    ,[ItemNumber]
                     ,[TaxCodeID]
                     ,[UnitPrice]
                     ,[UnitCost]
                     ,[STS]
                     ,[ItemType]
                     ,[BrandID]
+                    ,[ManualPrice]
+                    ,[Discountable]
+                    ,[Inventory]
+                    ,[AvailableOnWeb]
+                    ,[BtlDepositInPrice]
+                    ,[BtlDepositInCost]
+                    ,[EcoFeeInPrice]
+                    ,[EcoFeeInCost]
                     ,[Barcode]
                     ,[ReportCode]
                     ,[ImageFileName]
                     ,[ImageFileData]
-                    , hs.[SdItemID]
-                    , hs.Status
-                    , hs.ResponseMsg
-                FROM [Vendor_Portal].[dbo].[item] t
-                LEFT Join (SELECT TOP 1 h.[id]
-                    ,[ExtItemID]
                     ,[SdItemID]
-                    ,[StatusID]
-                    ,[ResponseMsg]
-                    ,[SendUserID]
-                    ,[SendDate]
-                    , s.Status
-                FROM [Vendor_Portal].[dbo].[sendItemHistory] h
-                INNER JOIN SendItemStatus s
-                ON h.StatusID = s.id
-                ORDER BY SendDate DESC) hs
-                ON t.ItemID = hs.ExtItemID`;
+                    ,[LastAction]
+                    ,[LastStatus]                    
+                    ,[LastSendDate]
+                FROM [Vendor_Portal].[dbo].[item]`;
 
         if (result.recordset.length > 0) {
             let categories: Category[] = await getALLCategories('563449A5511C45FBAD060D310088AD2E');
@@ -66,18 +81,28 @@ export async function getItems(): Promise<Item[] | undefined> {
                         barcode: item.Barcode,
                         itemName: item.ItemName,
                         itemDesc: item.ItemDesc,
+                        itemNumber: item.ItemNumber,
                         unitPrice: item.UnitPrice,
                         unitCost: item.UnitCost,
                         taxCodeID: item.TaxCodeID.toString(),
                         itemType: item.ItemType,
                         sts: item.STS,
+                        manualPrice: item.ManualPrice,
+                        discountable: item.Discountable,
+                        inventory: item.Inventory,
+                        availableOnWeb: item.AvailableOnWeb,
+                        btlDepositInPrice: item.BtlDepositInPrice,
+                        btlDepositInCost: item.BtlDepositInCost,
+                        ecoFeeInPrice: item.EcoFeeInPrice,
+                        ecoFeeInCost: item.EcoFeeInCost,     
                         brandID: item.BrandID.toString(),
                         reportCode: item.ReportCode,
                         imageFileName: item.ImageFileName,
                         imageFileData: item.ImageFileData,
                         sdItemID: item.SdItemID,
-                        status: item.Status,
-                        resResponseMsg: item.ResponseMsg
+                        lastAction: item.LastAction,
+                        lastStatus: item.LastStatus,
+                        lastSendDate: item.LastSendDate ? item.LastSendDate.toLocaleString("en-US") : '' 
                     }
                 );
             });
@@ -106,16 +131,42 @@ export async function updateItem(item: Item): Promise<number> {
                 ,ItemType = ${item.itemType}
                 ,STS = ${item.sts}
                 ,BrandID = ${Number(item.brandID)}
-                ,barcode = ${item.barcode}
-                ,reportCode = ${item.reportCode}
-                ,imageFileName = ${item.imageFileName}
-                ,imageFileData = ${item.imageFileData}
+                ,ItemNumber = ${item.itemNumber}
+                ,ManualPrice = ${item.manualPrice}
+                ,Discountable = ${item.discountable}
+                ,Inventory = ${item.inventory}
+                ,AvailableOnWeb = ${item.availableOnWeb}
+                ,BtlDepositInPrice = ${item.btlDepositInPrice}
+                ,BtlDepositInCost = ${item.btlDepositInCost}
+                ,EcoFeeInPrice = ${item.ecoFeeInPrice}
+                ,EcoFeeInCost = ${item.ecoFeeInCost}                
+                ,Barcode = ${item.barcode}
+                ,ReportCode = ${item.reportCode}
+                ,ImageFileName = ${item.imageFileName}
+                ,ImageFileData = ${item.imageFileData}
             WHERE ItemID = ${item.itemID}
         `;
         return result.rowsAffected[0];
     } catch (error) {
         console.error('Failed to update item:', error);
         throw new Error('Failed to update item.');
+    }
+}
+
+export async function updateItemByResponse(response: ExtItemResponse): Promise<number> {
+    try {
+        const result = await sql.query`
+            UPDATE item
+            SET  [SdItemID] = ${Number(response.sdItemID)}
+                ,[LastAction] = ${response.action}
+                ,[LastStatus] = ${response.status}
+                ,[LastSendDate] = ${new Date(response.sendDate)}
+            WHERE ItemID = ${response.extItemID}
+        `;
+        return result.rowsAffected[0];
+    } catch (error) {
+        console.error('Failed to update item with sending response:', error);
+        throw new Error('Failed to update item with sending response.');
     }
 }
 
@@ -145,24 +196,46 @@ export async function createNewItem(item: Item): Promise<number> {
                 ,[STS]
                 ,[ItemType]
                 ,[BrandID]
+                ,[ItemNumber]
+                ,[ManualPrice]
+                ,[Discountable]
+                ,[Inventory]
+                ,[AvailableOnWeb]
+                ,[BtlDepositInPrice]
+                ,[BtlDepositInCost]
+                ,[EcoFeeInPrice]
+                ,[EcoFeeInCost]
                 ,[Barcode]
                 ,[ReportCode]
                 ,[ImageFileName]
-                ,[ImageFileData])
+                ,[ImageFileData]
+                ,[CreateUserID]
+                ,[CreateDate])
             VALUES
                 (${Number(item.categoryID)}
                 ,${item.itemName}
                 ,${item.itemDesc}
-                ,${Number(item.unitPrice)}
-                ,${Number(item.unitCost)}
                 ,${Number(item.taxCodeID)}
-                ,${item.itemType}
+                ,${Number(item.unitPrice)}
+                ,${Number(item.unitCost)}                
                 ,${item.sts}
-                ,${Number(item.brandID)}
+                ,${item.itemType}                
+                ,${item.brandID}
+                ,${item.itemNumber}
+                ,${item.manualPrice}
+                ,${item.discountable}
+                ,${item.inventory}
+                ,${item.availableOnWeb}
+                ,${item.btlDepositInPrice}
+                ,${item.btlDepositInCost}
+                ,${item.ecoFeeInPrice}
+                ,${item.ecoFeeInCost}                
                 ,${item.barcode}
                 ,${item.reportCode}
                 ,${item.imageFileName}
-                ,${item.imageFileData})`;
+                ,${item.imageFileData}
+                ,${item.createUserID}
+                ,${new Date()})`;
 
         return result.rowsAffected[0];
     } catch (error) {
@@ -175,17 +248,19 @@ export async function createSendItemHistory(history: SendItemHistory): Promise<n
     try {        
         const result = await sql.query`
             INSERT INTO [dbo].[sendItemHistory]
-                ([ExtItemID]
-                ,[SdItemID]
-                ,[StatusID]
+                ([ExtItemID]                
+                ,[Action]
+                ,[Status]
                 ,[ResponseMsg]
-                ,[SendUserID])
+                ,[SendUserID]
+                ,[SendDate])
             VALUES
                 (${history.extItemID}
-                ,${history.sdItemID}
-                ,${history.statusID}
+                ,${history.action}
+                ,${history.status}
                 ,${history.responseMsg}
-                ,${history.sendUserID})`;
+                ,${history.sendUserID}
+                ,${new Date(history.sendDate)})`;
 
         return result.rowsAffected[0];
     } catch (error) {
@@ -268,6 +343,48 @@ export async function getReportCodeLabels(publicToken: string): Promise<{label: 
             }])).values()
         );
         resolve(uniqueList);
+    });
+}
+
+export async function getItemTypeLabels(): Promise<{label: string, value: string}[]> {
+    return new Promise<{label: string, value: string}[]>(async (resolve) => {
+        const itemTypes: string[] = await getItemTypes();
+        const list = itemTypes.map((itemType) => {
+            return {
+                label: itemType,
+                value: itemType
+            }
+        });
+
+        resolve(list);
+    });
+}
+
+export async function getItemStatusLabels(): Promise<{label: string, value: string}[]> {
+    return new Promise<{label: string, value: string}[]>(async (resolve) => {
+        const statuses: string[] = await getItemStatuses();
+        const list = statuses.map((status) => {
+            return {
+                label: status,
+                value: status
+            }
+        });
+
+        resolve(list);
+    });
+}
+
+export async function checkBarcodeDuplication(publicToken: string, barcodeString: string): Promise<boolean> {
+    return new Promise<boolean>(async (resolve) => {
+        const isDuplicated: boolean = await barcodesDuplicationCheck(publicToken, barcodeString);        
+        resolve(isDuplicated);
+    });
+}
+
+export async function checkItemNumberDuplication(publicToken: string, itemNumber: string): Promise<boolean> {
+    return new Promise<boolean>(async (resolve) => {
+        const isDuplicated: boolean = await itemNumberDuplicationCheck(publicToken, itemNumber);        
+        resolve(isDuplicated);
     });
 }
 

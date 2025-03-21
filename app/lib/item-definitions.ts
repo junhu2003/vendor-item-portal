@@ -73,13 +73,24 @@ export type Item = {
     sts: string;
     itemType: string;    
     brandID: number;
-    barcode: string;
+    manualPrice: boolean;
+    discountable: boolean;
+    inventory: boolean;
+    availableOnWeb: boolean;
+    btlDepositInPrice: boolean;
+	btlDepositInCost: boolean;
+    ecoFeeInPrice: boolean;
+    ecoFeeInCost: boolean;	
+    barcode?: string;
 	reportCode: string;
 	imageFileName?: string;
 	imageFileData?: string;
     sdItemID?: number;
-    status?: string;
-    responseMsg?: string;
+    lastAction?: string;
+    lastStatus?: string;
+    lastSendDate?: Date;
+    createdDate?: Date;
+    createUserID?: string;
 };
 
 export type ExtItems = {
@@ -91,14 +102,16 @@ export type ExtItemResponse = {
     extItemID: number;
     sdItemID: number;
     message: string;
+    action: string;
     status: string;
+    sendDate: Date;
 }
 
 export type SendItemHistory = {
     id: number;
     extItemID: number;
-    sdItemID:  number;
-    statusID: number;
+    action: string;
+    status: string;
     responseMsg: string;
     sendUserID: string;
     sendDate: Date;
